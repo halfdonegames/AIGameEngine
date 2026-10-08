@@ -1,34 +1,49 @@
 #pragma once
-#include <cstddef>
-#include <cstdint>
-#include <vector>
+
 #include "gaia/core/status.hpp"
 #include "gaia/ecs/components.hpp"
-#include "gaia/ecs/entity.hpp"
 #include "gaia/ecs/packed_store.hpp"
 
+#include <cstdint>
+#include <string>
+#include <vector>
+
 namespace gaia {
+
 class World {
-  public:
-    Entity create_entity();
-    Status destroy_entity(Entity entity);
-    [[nodiscard]] bool alive(Entity entity) const;
-    Status add_transform(Entity, Transform); Status add_velocity(Entity, Velocity);
-    Status add_mesh_renderer(Entity, MeshRenderer); Status add_rigid_body(Entity, RigidBody);
-    Status add_audio_source(Entity, AudioSource); Status add_script(Entity, Script);
-    Transform* transform(Entity e) { return transforms_.get(e); } const Transform* transform(Entity e) const { return transforms_.get(e); }
-    Velocity* velocity(Entity e) { return velocities_.get(e); } const Velocity* velocity(Entity e) const { return velocities_.get(e); }
-    [[nodiscard]] const PackedStore<Transform>& transforms() const { return transforms_; }
-    [[nodiscard]] const PackedStore<MeshRenderer>& mesh_renderers() const { return mesh_renderers_; }
-    [[nodiscard]] const PackedStore<RigidBody>& rigid_bodies() const { return rigid_bodies_; }
-    [[nodiscard]] const PackedStore<AudioSource>& audio_sources() const { return audio_sources_; }
-    [[nodiscard]] const PackedStore<Script>& scripts() const { return scripts_; }
-    [[nodiscard]] size_t entity_count() const { return live_count_; }
-    Status simulate(float delta_seconds);
-  private:
-    template <typename T> Status add(Entity e, PackedStore<T>& store, T value);
-    std::vector<uint32_t> generations_; std::vector<uint32_t> free_indices_; size_t live_count_{};
-    PackedStore<Transform> transforms_; PackedStore<Velocity> velocities_; PackedStore<MeshRenderer> mesh_renderers_;
-    PackedStore<RigidBody> rigid_bodies_; PackedStore<AudioSource> audio_sources_; PackedStore<Script> scripts_;
+public:
+    Result<Entity> CreateEntity(std::string name);
+    Status DestroyEntity(Entity entity);
+    [[nodiscard]] bool IsAlive(Entity entity) const;
+    [[nodiscard]] std::size_t EntityCount() const { return m_AliveCount; }
+
+    Status SetTransform(Entity entity, TransformComponent component);
+    Status SetRenderable(Entity entity, RenderableComponent component);
+    Status SetRigidBody(Entity entity, RigidBodyComponent component);
+    Status SetAudioEmitter(Entity entity, AudioEmitterComponent component);
+    Status SetUtilityAgent(Entity entity, UtilityAgentComponent component);
+    Status SetScript(Entity entity, ScriptComponent component);
+    Status RemoveComponent(Entity entity, const std::string& componentName);
+
+    [[nodiscard]] const PackedStore<TransformComponent>& Transforms() const { return m_Transforms; }
+    [[nodiscard]] const PackedStore<RenderableComponent>& Renderables() const { return m_Renderables; }
+    [[nodiscard]] const PackedStore<RigidBodyComponent>& RigidBodies() const { return m_RigidBodies; }
+    [[nodiscard]] const PackedStore<AudioEmitterComponent>& AudioEmitters() const { return m_AudioEmitters; }
+    [[nodiscard]] const PackedStore<UtilityAgentComponent>& UtilityAgents() const { return m_UtilityAgents; }
+    [[nodiscard]] const PackedStore<ScriptComponent>& Scripts() const { return m_Scripts; }
+
+private:
+    struct EntitySlot { uint32_t Generation = 1; bool Alive = false; };
+    Status ValidateAlive(Entity entity) const;
+    std::vector<EntitySlot> m_Entities;
+    std::vector<uint32_t> m_FreeIndices;
+    std::size_t m_AliveCount = 0;
+    PackedStore<TransformComponent> m_Transforms;
+    PackedStore<RenderableComponent> m_Renderables;
+    PackedStore<RigidBodyComponent> m_RigidBodies;
+    PackedStore<AudioEmitterComponent> m_AudioEmitters;
+    PackedStore<UtilityAgentComponent> m_UtilityAgents;
+    PackedStore<ScriptComponent> m_Scripts;
 };
-}  // namespace gaia
+
+} // namespace gaia

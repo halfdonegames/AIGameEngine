@@ -1,23 +1,26 @@
-# G.A.I.A. Engine contributor guide
+# G.A.I.A-I development guide
 
-## Scope and design rules
+## Scope and architecture
 
-- Keep the engine portable across Windows, macOS, and Ubuntu 24.04+. Build with CMake; do not add platform-specific behavior without an equivalent implementation or a documented capability check.
-- Entities are opaque generational IDs. Gameplay state belongs only in packed component stores; never attach stateful behavior to entity objects.
-- Public engine APIs must return `Result`/`Status` values for recoverable failure. Do not use exceptions across API boundaries.
-- Scene files are the source of truth for authoring. Keep their JSON schema backwards-compatible and validate all untrusted input before modifying a world.
-- Renderer, audio, physics, windowing, and scripting are adapters behind interfaces. Core code must remain independently testable and dependency-free.
+- Keep `GaiaCore` a portable, warning-clean static C++ library. Platform code belongs behind an interface.
+- Entities are opaque generational IDs. Store component data only in packed, contiguous stores; never attach behavior or ownership graphs to entities.
+- Scene files are the source of truth for authored worlds. Keep them deterministic, UTF-8 JSON, reviewable, and round-trippable.
+- Public headers use `gaia` namespaces, PascalCase types/functions, `m_` private members, and `s_` static variables, following the requested Hazel-style conventions.
+- Treat all file data and script commands as untrusted. Validate every numeric range, identifier, duplicate entity, and component requirement before mutating a world.
 
-## Quality gate
+## Change discipline
 
-1. Format C++ with the repository `.clang-format`.
-2. Build with warnings enabled; warnings are errors for engine targets.
-3. Add focused unit tests for every behavior change and update `assets/scenes/feature_coverage.json` if a public feature changes.
-4. Run `ctest --test-dir build --output-on-failure`.
-5. Review `git diff --check` and the staged diff before a commit.
+- Write tests before or alongside behavior changes. Add coverage for successful and rejected inputs, stale IDs, and state atomicity where applicable.
+- Run `cmake --preset default`, `cmake --build --preset default`, and `ctest --preset default --output-on-failure` before a commit.
+- Do not make a renderer, physics system, scripting host, or external dependency mandatory until it has a platform-neutral boundary, failure path, and automated coverage.
+- Keep editor-only behavior out of exported runtime targets. Exported builds must load scene data without editor dependencies.
 
-## Safety
+## Data and performance
 
-- Do not silently discard unknown declarative data.
-- Do not use raw owning pointers, global mutable state, or `new`/`delete` in engine code.
-- Validate entity liveness on every public ECS operation.
+- Prefer structure-of-arrays/packed component stores, explicit data views, and batch APIs. Do not introduce per-entity heap allocation into hot paths.
+- Any GPU-driven feature needs a CPU fallback path and capability reporting.
+- Physics and simulation parameters must be dimensionless/configurable scene data; do not embed world constants in systems.
+
+## Completion gate
+
+Before committing: inspect the diff, run formatting and tests, ensure feature coverage scene still validates, and document any intentional deferred capability in `README.md`.

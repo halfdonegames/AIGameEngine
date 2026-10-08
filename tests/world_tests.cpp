@@ -1,5 +1,21 @@
-#include "test_framework.hpp"
 #include "gaia/ecs/world.hpp"
-TEST(EntityReuseInvalidatesOldHandle) { gaia::World w; auto first = w.create_entity(); CHECK(w.alive(first)); CHECK(w.destroy_entity(first).ok()); CHECK(!w.alive(first)); auto second = w.create_entity(); CHECK(second.index == first.index); CHECK(second.generation != first.generation); CHECK(w.alive(second)); }
-TEST(PackedComponentsAndSimulation) { gaia::World w; auto e = w.create_entity(); CHECK(w.add_transform(e, {}).ok()); CHECK(w.add_velocity(e, {{2.0F, 0.0F, -1.0F}}).ok()); CHECK(w.simulate(0.5F).ok()); CHECK(w.transform(e)->position[0] == 1); CHECK(w.transform(e)->position[2] == -0.5F); CHECK(!w.add_transform(e, {}).ok()); CHECK(!w.simulate(-1).ok()); }
-TEST(DestroyRemovesAllComponents) { gaia::World w; auto e = w.create_entity(); CHECK(w.add_transform(e, {}).ok()); CHECK(w.destroy_entity(e).ok()); CHECK(w.transforms().size() == 0); CHECK(w.transform(e) == nullptr); }
+#include "test_framework.hpp"
+
+GAIA_TEST(WorldRejectsStaleEntitiesAndReusesSlotsSafely) {
+    gaia::World world;
+    const auto original = world.CreateEntity("original");
+    GAIA_REQUIRE(original.IsOk());
+    GAIA_REQUIRE(world.DestroyEntity(original.Value()).IsOk());
+    const auto replacement = world.CreateEntity("replacement");
+    GAIA_REQUIRE(replacement.IsOk());
+    GAIA_REQUIRE(replacement.Value().Index == original.Value().Index);
+    GAIA_REQUIRE(replacement.Value().Generation != original.Value().Generation);
+    GAIA_REQUIRE(!world.SetScript(original.Value(), {"bad.lua"}).IsOk());
+}
+
+GAIA_TEST(WorldRejectsInvalidComponentData) {
+    gaia::World world; const auto entity = world.CreateEntity("entity"); GAIA_REQUIRE(entity.IsOk());
+    GAIA_REQUIRE(!world.SetRenderable(entity.Value(), {"", "mat"}).IsOk());
+    GAIA_REQUIRE(!world.SetRigidBody(entity.Value(), {-1.0F, 1.0F, 1.0F, 1.0F}).IsOk());
+    GAIA_REQUIRE(!world.SetTransform(entity.Value(), {{0, 0, 0}, {0, 0, 0}, {1, 0, 1}}).IsOk());
+}

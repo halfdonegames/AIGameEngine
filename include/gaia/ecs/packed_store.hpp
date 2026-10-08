@@ -1,49 +1,51 @@
 #pragma once
-#include <cstddef>
-#include <optional>
-#include <vector>
+
 #include "gaia/ecs/entity.hpp"
 
+#include <algorithm>
+#include <cstddef>
+#include <optional>
+#include <utility>
+#include <vector>
+
 namespace gaia {
-template <typename T>
+
+template <typename TComponent>
 class PackedStore {
-  public:
-    bool contains(Entity entity) const {
-        return entity.index < sparse_.size() && sparse_[entity.index] != kMissing;
-    }
-    T* get(Entity entity) {
-        if (!contains(entity)) return nullptr;
-        return &data_[sparse_[entity.index]];
-    }
-    const T* get(Entity entity) const {
-        if (!contains(entity)) return nullptr;
-        return &data_[sparse_[entity.index]];
-    }
-    bool insert(Entity entity, T value) {
-        if (contains(entity)) return false;
-        if (entity.index >= sparse_.size()) sparse_.resize(entity.index + 1, kMissing);
-        sparse_[entity.index] = data_.size();
-        entities_.push_back(entity);
-        data_.push_back(std::move(value));
+public:
+    [[nodiscard]] bool Contains(Entity entity) const { return Find(entity).has_value(); }
+    [[nodiscard]] const TComponent* Get(Entity entity) const { const auto index = Find(entity); return index ? &m_Components[*index] : nullptr; }
+    [[nodiscard]] TComponent* Get(Entity entity) { const auto index = Find(entity); return index ? &m_Components[*index] : nullptr; }
+
+    bool InsertOrAssign(Entity entity, TComponent component) {
+        const auto index = Find(entity);
+        if (index) { m_Components[*index] = std::move(component); return false; }
+        const auto position = std::lower_bound(m_Entities.begin(), m_Entities.end(), entity);
+        const auto offset = static_cast<std::size_t>(position - m_Entities.begin());
+        m_Entities.insert(position, entity);
+        m_Components.insert(m_Components.begin() + static_cast<std::ptrdiff_t>(offset), std::move(component));
         return true;
     }
-    bool erase(Entity entity) {
-        if (!contains(entity)) return false;
-        const size_t removed = sparse_[entity.index];
-        const size_t last = data_.size() - 1;
-        if (removed != last) {
-            data_[removed] = std::move(data_[last]);
-            entities_[removed] = entities_[last];
-            sparse_[entities_[removed].index] = removed;
+
+    bool Remove(Entity entity) {
+        const auto index = Find(entity);
+        if (!index) {
+            return false;
         }
-        data_.pop_back(); entities_.pop_back(); sparse_[entity.index] = kMissing;
+        m_Entities.erase(m_Entities.begin() + static_cast<std::ptrdiff_t>(*index));
+        m_Components.erase(m_Components.begin() + static_cast<std::ptrdiff_t>(*index));
         return true;
     }
-    void clear() { data_.clear(); entities_.clear(); sparse_.clear(); }
-    [[nodiscard]] size_t size() const { return data_.size(); }
-    [[nodiscard]] const std::vector<Entity>& entities() const { return entities_; }
-  private:
-    static constexpr size_t kMissing = static_cast<size_t>(-1);
-    std::vector<T> data_; std::vector<Entity> entities_; std::vector<size_t> sparse_;
+    [[nodiscard]] std::size_t Size() const { return m_Entities.size(); }
+
+private:
+    [[nodiscard]] std::optional<std::size_t> Find(Entity entity) const {
+        const auto iterator = std::lower_bound(m_Entities.begin(), m_Entities.end(), entity);
+        if (iterator == m_Entities.end() || *iterator != entity) return std::nullopt;
+        return static_cast<std::size_t>(iterator - m_Entities.begin());
+    }
+    std::vector<Entity> m_Entities;
+    std::vector<TComponent> m_Components;
 };
-}  // namespace gaia
+
+} // namespace gaia

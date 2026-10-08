@@ -1,26 +1,40 @@
 #pragma once
-#include <map>
-#include <string>
-#include <variant>
-#include <vector>
+
 #include "gaia/core/status.hpp"
 
+#include <map>
+#include <string>
+#include <string_view>
+#include <variant>
+#include <vector>
+
 namespace gaia {
-struct Json;
-using JsonArray = std::vector<Json>;
-using JsonObject = std::map<std::string, Json, std::less<>>;
-struct Json {
-    using Value = std::variant<std::nullptr_t, bool, double, std::string, JsonArray, JsonObject>;
-    Value value{nullptr};
-    [[nodiscard]] bool is_object() const { return std::holds_alternative<JsonObject>(value); }
-    [[nodiscard]] bool is_array() const { return std::holds_alternative<JsonArray>(value); }
-    [[nodiscard]] const JsonObject* object() const { return std::get_if<JsonObject>(&value); }
-    [[nodiscard]] const JsonArray* array() const { return std::get_if<JsonArray>(&value); }
-    [[nodiscard]] const std::string* string() const { return std::get_if<std::string>(&value); }
-    [[nodiscard]] const double* number() const { return std::get_if<double>(&value); }
-    [[nodiscard]] const bool* boolean() const { return std::get_if<bool>(&value); }
+
+class JsonValue {
+public:
+    using Array = std::vector<JsonValue>;
+    using Object = std::map<std::string, JsonValue, std::less<>>;
+    using Storage = std::variant<std::nullptr_t, bool, double, std::string, Array, Object>;
+
+    JsonValue() : m_Value(nullptr) {}
+    explicit JsonValue(Storage value) : m_Value(std::move(value)) {}
+
+    [[nodiscard]] bool IsObject() const;
+    [[nodiscard]] bool IsArray() const;
+    [[nodiscard]] bool IsString() const;
+    [[nodiscard]] bool IsNumber() const;
+    [[nodiscard]] bool IsBool() const;
+    [[nodiscard]] const Object* AsObject() const;
+    [[nodiscard]] const Array* AsArray() const;
+    [[nodiscard]] const std::string* AsString() const;
+    [[nodiscard]] const double* AsNumber() const;
+    [[nodiscard]] const bool* AsBool() const;
+    [[nodiscard]] const JsonValue* Find(std::string_view key) const;
+
+private:
+    Storage m_Value;
 };
-Result<Json> ParseJson(const std::string& source);
-std::string ToJson(const Json& json);
-const Json* Find(const JsonObject& object, const std::string& key);
-}  // namespace gaia
+
+Result<JsonValue> ParseJson(const std::string& text);
+
+} // namespace gaia

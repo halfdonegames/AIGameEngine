@@ -1,30 +1,24 @@
-# G.A.I.A. Engine
+# G.A.I.A-I
 
-G.A.I.A. is a portable, data-oriented 3D game-engine foundation. It treats worlds as declarative JSON and gameplay state as packed ECS component arrays, so both people and AI tools can author scenes predictably.
+G.A.I.A-I is an AI-first, data-oriented 3D game-engine foundation. Its core is a portable C++20 static library with a strict generational-entity ECS, human/agent-readable scenes, and a transactional command API suitable for editor automation. Separate editor and export-runtime executables consume the same core.
 
 ## Current foundation
 
-- Generational entity IDs and packed sparse-set component stores.
-- Pure data components: transform, velocity, mesh renderer, rigid body, audio source, and script.
-- Atomic, validated JSON scene loading and deterministic simulation updates.
-- Structured LLM control API for querying and changing worlds.
-- A feature-coverage scene and portable unit-test suite.
-- Executable editor/runtime hosts ready to be connected to GLFW, NVRHI/Vulkan, miniaudio, a physics adapter, and Lua.
+- Packed, deterministic ECS stores for transforms, renderable mesh/material references, rigid-body parameters, audio emitters, utility-AI agents, and scripts.
+- Validated JSON scenes; the checked-in feature-coverage scene exercises every current component and scripting command.
+- An automation control API that can create/destroy entities and add, update, and remove components without UI automation.
+- Native CMake build and test presets. The foundation intentionally has no fake renderer: Vulkan/NVRHI, GLFW, GLM, miniaudio, Lua/Rust, physics, glTF, and editor UI adapters are planned backend integrations with explicit interfaces, capability reporting, and tests before activation.
 
 ## Build and test
 
 ```powershell
-cmake -S . -B build -DGAIA_BUILD_TESTS=ON
-cmake --build build --config Debug
-ctest --test-dir build -C Debug --output-on-failure
+cmake --preset default
+cmake --build --preset default
+ctest --test-dir build/default --output-on-failure
 ```
 
-The default build deliberately has no network-time dependency fetches. Production integrations are feature-gated so the deterministic ECS, authoring pipeline, and tests are always buildable first.
+## Scene contract
 
-## Scene format
+Scenes are UTF-8 JSON. An entity has a positive stable `id`, a display `name`, and a `components` object. Component arrays are sorted by entity ID by the ECS, making snapshots deterministic. World-scale and simulation values are data fields rather than engine constants.
 
-See `assets/scenes/feature_coverage.json`. Scene loading is transactional: a malformed file leaves the active world untouched. Component data is explicit JSON designed for tooling and AI agents rather than editor clicks.
-
-## Integration roadmap
-
-The adapter seam is intentional. GLFW/NVRHI (Vulkan), glm, miniaudio, Lua, and a physics implementation should be pinned through a lockfile/package manager and implemented in `platform/` without leaking their types into `gaia-core`.
+This repository is a solid, tested platform for the larger engine roadmap—not a claim that the unimplemented renderer, MPM fluid solver, GPU compute simulation, Rust bridge, or production editor already exist.

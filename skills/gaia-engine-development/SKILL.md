@@ -1,14 +1,14 @@
 ---
 name: gaia-engine-development
-description: Build or modify the G.A.I.A. game engine while preserving its strict ECS, declarative scene, portability, and verification requirements.
+description: Implement or review G.A.I.A-I engine code, scenes, scripting commands, ECS systems, or build targets while preserving the project’s data-oriented and test-first architecture.
 ---
 
-# G.A.I.A. engine development
+# G.A.I.A-I engine development
 
-Use this skill for engine, runtime, editor, scene, or scripting changes in this repository.
+Use this skill for work inside this repository that changes engine behavior or authored scene data.
 
-Read `AGENTS.md` first. Maintain pure ECS: entities are generational identifiers and mutable gameplay data is stored in packed component arrays. Keep authoring inputs declarative and validate them before world mutation.
-
-For a new public capability, add a focused automated test and extend `assets/scenes/feature_coverage.json` when the capability can be represented declaratively. Keep core code free of platform SDK types; add graphics, audio, physics, windowing, and Lua functionality behind adapters.
-
-Before committing, configure/build/test with CMake, inspect the resulting diff, and report any unavailable optional integration dependency rather than faking support.
+- Read `AGENTS.md` first and preserve its portability, data-oriented, and validation rules.
+- Treat JSON scenes and the scripting control surface as public contracts. Extend them compatibly and cover malformed as well as valid input in tests.
+- Keep the core free of editor, renderer, and platform implementation dependencies. Add interfaces and capability states before backend-specific code.
+- Run the CMake build and the full test suite after changes. Include the feature-coverage scene in the test path whenever the schema changes.
+- Before a commit, review the complete staged diff for style, ownership, bounds validation, stale-entity behavior, deterministic ordering, and error propagation.

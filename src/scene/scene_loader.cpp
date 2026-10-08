@@ -1,34 +1,34 @@
 #include "gaia/scene/scene_loader.hpp"
+
 #include "gaia/core/json.hpp"
+
+#include <cmath>
+#include <fstream>
+#include <limits>
+#include <sstream>
 
 namespace gaia {
 namespace {
-Status Schema(const std::string& message) { return Status::Error(ErrorCode::kSchemaError, message); }
-const JsonObject* Object(const Json* value) { return value == nullptr ? nullptr : value->object(); }
-Result<std::array<float, 3>> Vec3(const Json* value, const std::string& name, std::array<float, 3> fallback) {
-    if (value == nullptr) return Result<std::array<float, 3>>::Success(fallback); const JsonArray* a = value->array();
-    if (a == nullptr || a->size() != 3) return Result<std::array<float, 3>>::Failure(ErrorCode::kSchemaError, name + " must have 3 numbers");
-    std::array<float, 3> out{}; for (size_t i = 0; i < 3; ++i) { const double* n = (*a)[i].number(); if (!n) return Result<std::array<float, 3>>::Failure(ErrorCode::kSchemaError, name + " must contain numbers"); out[i] = static_cast<float>(*n); } return Result<std::array<float, 3>>::Success(out);
+const JsonValue::Object* Object(const JsonValue& value) { return value.AsObject(); }
+const JsonValue::Array* Array(const JsonValue& value) { return value.AsArray(); }
+const JsonValue* Field(const JsonValue::Object& object, const char* key) { const auto iterator = object.find(key); return iterator == object.end() ? nullptr : &iterator->second; }
+Status Number(const JsonValue::Object& object, const char* key, float& output) { const auto* value = Field(object, key); const auto* number = value == nullptr ? nullptr : value->AsNumber(); if (number == nullptr || !std::isfinite(*number) || *number > std::numeric_limits<float>::max() || *number < -std::numeric_limits<float>::max()) return Status::Error(std::string("Expected finite float for '") + key + "'"); output = static_cast<float>(*number); return Status::Ok(); }
+Status Text(const JsonValue::Object& object, const char* key, std::string& output) { const auto* value = Field(object, key); const auto* text = value == nullptr ? nullptr : value->AsString(); if (text == nullptr) return Status::Error(std::string("Expected string for '") + key + "'"); output = *text; return Status::Ok(); }
+Status Boolean(const JsonValue::Object& object, const char* key, bool& output) { const auto* value = Field(object, key); const auto* boolean = value == nullptr ? nullptr : value->AsBool(); if (boolean == nullptr) return Status::Error(std::string("Expected boolean for '") + key + "'"); output = *boolean; return Status::Ok(); }
+Status Vec3(const JsonValue::Object& object, const char* key, std::array<float, 3>& output) { const auto* value = Field(object, key); const auto* array = value == nullptr ? nullptr : value->AsArray(); if (array == nullptr || array->size() != 3) return Status::Error(std::string("Expected 3-number array for '") + key + "'"); for (std::size_t index = 0; index < 3; ++index) { const auto* number = (*array)[index].AsNumber(); if (number == nullptr || !std::isfinite(*number) || *number > std::numeric_limits<float>::max() || *number < -std::numeric_limits<float>::max()) return Status::Error(std::string("Invalid vector for '") + key + "'"); output[index] = static_cast<float>(*number); } return Status::Ok(); }
 }
-Status AddEntity(const JsonObject& entity, World& world) {
-    const JsonObject* components = Object(Find(entity, "components")); if (!components) return Schema("entity.components must be an object"); Entity e = world.create_entity();
-    for (const auto& [name, ignored] : *components) {
-        static_cast<void>(ignored);
-        if (name != "transform" && name != "velocity" && name != "mesh_renderer" && name != "rigid_body" && name != "audio_source" && name != "script") return Schema("unknown component: " + name);
-    }
-    if (const JsonObject* c = Object(Find(*components, "transform"))) { auto p = Vec3(Find(*c, "position"), "transform.position", {}); auto r = Vec3(Find(*c, "rotation"), "transform.rotation", {}); auto s = Vec3(Find(*c, "scale"), "transform.scale", {1, 1, 1}); if (!p.ok()) return p.status; if (!r.ok()) return r.status; if (!s.ok()) return s.status; if (auto status = world.add_transform(e, Transform{p.value, r.value, s.value}); !status.ok()) return status; }
-    if (const JsonObject* c = Object(Find(*components, "velocity"))) { auto v = Vec3(Find(*c, "meters_per_second"), "velocity.meters_per_second", {}); if (!v.ok()) return v.status; if (auto status = world.add_velocity(e, Velocity{v.value}); !status.ok()) return status; }
-    if (const JsonObject* c = Object(Find(*components, "mesh_renderer"))) { const Json* mesh = Find(*c, "mesh"); const Json* material = Find(*c, "material"); if (!mesh || !material || !mesh->string() || !material->string()) return Schema("mesh_renderer requires string mesh and material"); if (auto status = world.add_mesh_renderer(e, MeshRenderer{*mesh->string(), *material->string()}); !status.ok()) return status; }
-    if (const JsonObject* c = Object(Find(*components, "rigid_body"))) { const Json* mass = Find(*c, "mass"); if (!mass || !mass->number() || *mass->number() <= 0) return Schema("rigid_body.mass must be positive"); if (auto status = world.add_rigid_body(e, RigidBody{static_cast<float>(*mass->number())}); !status.ok()) return status; }
-    if (const JsonObject* c = Object(Find(*components, "audio_source"))) { const Json* clip = Find(*c, "clip"); if (!clip || !clip->string()) return Schema("audio_source.clip must be a string"); if (auto status = world.add_audio_source(e, AudioSource{*clip->string()}); !status.ok()) return status; }
-    if (const JsonObject* c = Object(Find(*components, "script"))) { const Json* asset = Find(*c, "asset"); if (!asset || !asset->string()) return Schema("script.asset must be a string"); if (auto status = world.add_script(e, Script{*asset->string()}); !status.ok()) return status; }
-    return Status::Ok();
+Status SceneLoader::LoadFromFile(const std::string& path, World& world) { std::ifstream input(path, std::ios::binary); if (!input) return Status::Error("Cannot open scene: " + path); std::ostringstream text; text << input.rdbuf(); return LoadFromText(text.str(), world); }
+Status SceneLoader::LoadFromText(const std::string& text, World& world) {
+    auto document = ParseJson(text); if (!document.IsOk()) return document.GetStatus(); const auto* root = Object(document.Value()); if (root == nullptr) return Status::Error("Scene root must be an object");
+    const auto* entitiesValue = document.Value().Find("entities"); const auto* entities = entitiesValue == nullptr ? nullptr : Array(*entitiesValue); if (entities == nullptr) return Status::Error("Scene requires entities array");
+    World staged;
+    for (const auto& entityValue : *entities) { const auto* entityObject = Object(entityValue); if (entityObject == nullptr) return Status::Error("Entity must be an object"); std::string name; auto status = Text(*entityObject, "name", name); if (!status.IsOk()) return status; auto entity = staged.CreateEntity(name); if (!entity.IsOk()) return entity.GetStatus(); const auto* componentsValue = entityValue.Find("components"); const auto* components = componentsValue == nullptr ? nullptr : Object(*componentsValue); if (components == nullptr) return Status::Error("Entity requires components object");
+        if (const auto* transform = componentsValue->Find("transform")) { const auto* data = Object(*transform); if (data == nullptr) return Status::Error("transform must be object"); TransformComponent component; if (!(status = Vec3(*data, "position", component.Position)).IsOk() || !(status = Vec3(*data, "rotationDegrees", component.RotationDegrees)).IsOk() || !(status = Vec3(*data, "scale", component.Scale)).IsOk()) return status; if (!(status = staged.SetTransform(entity.Value(), component)).IsOk()) return status; }
+        if (const auto* renderable = componentsValue->Find("renderable")) { const auto* data = Object(*renderable); if (data == nullptr) return Status::Error("renderable must be object"); RenderableComponent component; if (!(status = Text(*data, "mesh", component.Mesh)).IsOk() || !(status = Text(*data, "material", component.Material)).IsOk()) return status; if (!(status = staged.SetRenderable(entity.Value(), std::move(component))).IsOk()) return status; }
+        if (const auto* body = componentsValue->Find("rigidBody")) { const auto* data = Object(*body); if (data == nullptr) return Status::Error("rigidBody must be object"); RigidBodyComponent component; if (!(status = Number(*data, "mass", component.Mass)).IsOk() || !(status = Number(*data, "gravityScale", component.GravityScale)).IsOk() || !(status = Number(*data, "atmosphericDensity", component.AtmosphericDensity)).IsOk() || !(status = Number(*data, "viscosity", component.Viscosity)).IsOk()) return status; if (!(status = staged.SetRigidBody(entity.Value(), component)).IsOk()) return status; }
+        if (const auto* audio = componentsValue->Find("audioEmitter")) { const auto* data = Object(*audio); if (data == nullptr) return Status::Error("audioEmitter must be object"); AudioEmitterComponent component; if (!(status = Text(*data, "clip", component.Clip)).IsOk() || !(status = Number(*data, "gain", component.Gain)).IsOk() || !(status = Boolean(*data, "loop", component.Loop)).IsOk()) return status; if (!(status = staged.SetAudioEmitter(entity.Value(), std::move(component))).IsOk()) return status; }
+        if (const auto* agent = componentsValue->Find("utilityAgent")) { const auto* data = Object(*agent); if (data == nullptr) return Status::Error("utilityAgent must be object"); UtilityAgentComponent component; if (!(status = Number(*data, "energy", component.Energy)).IsOk() || !(status = Number(*data, "temperature", component.Temperature)).IsOk() || !(status = Number(*data, "seekEnergyWeight", component.SeekEnergyWeight)).IsOk() || !(status = Number(*data, "seekShelterWeight", component.SeekShelterWeight)).IsOk()) return status; if (!(status = staged.SetUtilityAgent(entity.Value(), component)).IsOk()) return status; }
+        if (const auto* script = componentsValue->Find("script")) { const auto* data = Object(*script); if (data == nullptr) return Status::Error("script must be object"); ScriptComponent component; if (!(status = Text(*data, "script", component.Script)).IsOk()) return status; if (!(status = staged.SetScript(entity.Value(), std::move(component))).IsOk()) return status; }
+    } world = std::move(staged); return Status::Ok();
 }
-}  // namespace
-Status SceneLoader::LoadJson(const std::string& source, World& destination) {
-    auto parsed = ParseJson(source); if (!parsed.ok()) return parsed.status; const JsonObject* root = parsed.value.object(); if (!root) return Schema("scene root must be an object"); const Json* version = Find(*root, "version"); const Json* entities = Find(*root, "entities");
-    if (!version || !version->number() || *version->number() != 1) return Schema("scene version must be 1"); if (!entities || !entities->array()) return Schema("scene.entities must be an array");
-    World staged; for (const Json& entity : *entities->array()) { const JsonObject* object = entity.object(); if (!object) return Schema("each entity must be an object"); if (auto status = AddEntity(*object, staged); !status.ok()) return status; }
-    destination = std::move(staged); return Status::Ok();
-}
-}  // namespace gaia
+} // namespace gaia

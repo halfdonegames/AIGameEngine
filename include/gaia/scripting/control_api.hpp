@@ -1,12 +1,19 @@
 #pragma once
-#include <string>
+
 #include "gaia/core/status.hpp"
 #include "gaia/ecs/world.hpp"
+
+#include <string>
+
 namespace gaia {
+
 class ControlApi {
-  public:
-    explicit ControlApi(World& world) : world_(world) {}
-    Result<std::string> execute(const std::string& request_json);
-  private: World& world_;
+public:
+    explicit ControlApi(World& world) : m_World(world) {}
+    Result<Entity> Execute(const std::string& command);
+
+private:
+    World& m_World;
 };
-}  // namespace gaia
+
+} // namespace gaia

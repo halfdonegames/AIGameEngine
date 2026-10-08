@@ -1,33 +1,49 @@
 #include "gaia/ecs/world.hpp"
+
 #include <cmath>
+#include <limits>
+#include <utility>
 
 namespace gaia {
-Entity World::create_entity() {
-    uint32_t index{};
-    if (!free_indices_.empty()) { index = free_indices_.back(); free_indices_.pop_back(); ++generations_[index]; }
-    else { index = static_cast<uint32_t>(generations_.size()); generations_.push_back(0); }
-    ++live_count_; return Entity{index, generations_[index]};
+namespace {
+bool IsFinitePositive(float value) { return std::isfinite(value) && value > 0.0F; }
 }
-bool World::alive(Entity e) const { return e.index < generations_.size() && generations_[e.index] == e.generation && e.generation % 2 == 0; }
-Status World::destroy_entity(Entity e) {
-    if (!alive(e)) return Status::Error(ErrorCode::kNotFound, "entity is not alive");
-    transforms_.erase(e); velocities_.erase(e); mesh_renderers_.erase(e); rigid_bodies_.erase(e); audio_sources_.erase(e); scripts_.erase(e);
-    ++generations_[e.index]; free_indices_.push_back(e.index); --live_count_; return Status::Ok();
+
+Result<Entity> World::CreateEntity(std::string name) {
+    if (name.empty()) return Result<Entity>::Failure("Entity name cannot be empty");
+    uint32_t index = 0;
+    if (m_FreeIndices.empty()) { index = static_cast<uint32_t>(m_Entities.size()); m_Entities.push_back({}); }
+    else { index = m_FreeIndices.back(); m_FreeIndices.pop_back(); }
+    auto& slot = m_Entities[index]; slot.Alive = true; ++m_AliveCount;
+    return Result<Entity>::Success({index, slot.Generation});
 }
-template <typename T> Status World::add(Entity e, PackedStore<T>& store, T value) {
-    if (!alive(e)) return Status::Error(ErrorCode::kNotFound, "entity is not alive");
-    if (!store.insert(e, std::move(value))) return Status::Error(ErrorCode::kAlreadyExists, "component already exists");
+
+Status World::ValidateAlive(Entity entity) const {
+    if (!entity.IsValid() || entity.Index >= m_Entities.size()) return Status::Error("Invalid entity ID");
+    const auto& slot = m_Entities[entity.Index];
+    if (!slot.Alive || slot.Generation != entity.Generation) return Status::Error("Stale or destroyed entity ID");
     return Status::Ok();
 }
-Status World::add_transform(Entity e, Transform c) { return add(e, transforms_, std::move(c)); }
-Status World::add_velocity(Entity e, Velocity c) { return add(e, velocities_, std::move(c)); }
-Status World::add_mesh_renderer(Entity e, MeshRenderer c) { return add(e, mesh_renderers_, std::move(c)); }
-Status World::add_rigid_body(Entity e, RigidBody c) { return add(e, rigid_bodies_, std::move(c)); }
-Status World::add_audio_source(Entity e, AudioSource c) { return add(e, audio_sources_, std::move(c)); }
-Status World::add_script(Entity e, Script c) { return add(e, scripts_, std::move(c)); }
-Status World::simulate(float seconds) {
-    if (!std::isfinite(seconds) || seconds < 0.0F) return Status::Error(ErrorCode::kInvalidArgument, "delta_seconds must be finite and non-negative");
-    for (const Entity e : velocities_.entities()) { if (Transform* t = transforms_.get(e)) { const Velocity* v = velocities_.get(e); for (size_t i = 0; i < 3; ++i) t->position[i] += v->meters_per_second[i] * seconds; } }
-    return Status::Ok();
+
+bool World::IsAlive(Entity entity) const { return ValidateAlive(entity).IsOk(); }
+
+Status World::DestroyEntity(Entity entity) {
+    const auto status = ValidateAlive(entity); if (!status.IsOk()) return status;
+    if (m_Entities[entity.Index].Generation == std::numeric_limits<uint32_t>::max()) return Status::Error("Entity generation exhausted");
+    m_Transforms.Remove(entity); m_Renderables.Remove(entity); m_RigidBodies.Remove(entity); m_AudioEmitters.Remove(entity); m_UtilityAgents.Remove(entity); m_Scripts.Remove(entity);
+    auto& slot = m_Entities[entity.Index]; slot.Alive = false;
+    ++slot.Generation; m_FreeIndices.push_back(entity.Index); --m_AliveCount; return Status::Ok();
 }
-}  // namespace gaia
+
+Status World::SetTransform(Entity entity, TransformComponent component) {
+    const auto status = ValidateAlive(entity); if (!status.IsOk()) return status;
+    for (const auto value : component.Scale) if (!IsFinitePositive(value)) return Status::Error("Transform scale must be finite and positive");
+    m_Transforms.InsertOrAssign(entity, std::move(component)); return Status::Ok();
+}
+Status World::SetRenderable(Entity entity, RenderableComponent component) { const auto status = ValidateAlive(entity); if (!status.IsOk()) return status; if (component.Mesh.empty() || component.Material.empty()) return Status::Error("Renderable requires mesh and material"); m_Renderables.InsertOrAssign(entity, std::move(component)); return Status::Ok(); }
+Status World::SetRigidBody(Entity entity, RigidBodyComponent component) { const auto status = ValidateAlive(entity); if (!status.IsOk()) return status; if (!IsFinitePositive(component.Mass) || !IsFinitePositive(component.GravityScale) || !IsFinitePositive(component.AtmosphericDensity) || !IsFinitePositive(component.Viscosity)) return Status::Error("Rigid body parameters must be finite and positive"); m_RigidBodies.InsertOrAssign(entity, component); return Status::Ok(); }
+Status World::SetAudioEmitter(Entity entity, AudioEmitterComponent component) { const auto status = ValidateAlive(entity); if (!status.IsOk()) return status; if (component.Clip.empty() || !std::isfinite(component.Gain) || component.Gain < 0.0F) return Status::Error("Audio emitter has invalid clip or gain"); m_AudioEmitters.InsertOrAssign(entity, std::move(component)); return Status::Ok(); }
+Status World::SetUtilityAgent(Entity entity, UtilityAgentComponent component) { const auto status = ValidateAlive(entity); if (!status.IsOk()) return status; if (!std::isfinite(component.Energy) || !std::isfinite(component.Temperature) || component.SeekEnergyWeight < 0.0F || component.SeekShelterWeight < 0.0F) return Status::Error("Utility agent values are invalid"); m_UtilityAgents.InsertOrAssign(entity, component); return Status::Ok(); }
+Status World::SetScript(Entity entity, ScriptComponent component) { const auto status = ValidateAlive(entity); if (!status.IsOk()) return status; if (component.Script.empty()) return Status::Error("Script reference cannot be empty"); m_Scripts.InsertOrAssign(entity, std::move(component)); return Status::Ok(); }
+Status World::RemoveComponent(Entity entity, const std::string& componentName) { const auto status = ValidateAlive(entity); if (!status.IsOk()) return status; if (componentName == "transform") m_Transforms.Remove(entity); else if (componentName == "renderable") m_Renderables.Remove(entity); else if (componentName == "rigidBody") m_RigidBodies.Remove(entity); else if (componentName == "audioEmitter") m_AudioEmitters.Remove(entity); else if (componentName == "utilityAgent") m_UtilityAgents.Remove(entity); else if (componentName == "script") m_Scripts.Remove(entity); else return Status::Error("Unknown component: " + componentName); return Status::Ok(); }
+} // namespace gaia

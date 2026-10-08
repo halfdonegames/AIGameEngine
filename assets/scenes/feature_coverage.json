@@ -1,6 +1,17 @@
 {
-  "version": 1,
+  "schemaVersion": 1,
   "entities": [
-    {"components": {"transform": {"position": [0, 2, 0], "rotation": [0, 0, 0], "scale": [1, 1, 1]}, "velocity": {"meters_per_second": [1, 0, 0]}, "mesh_renderer": {"mesh": "meshes/cube.gltf", "material": "materials/pbr_default"}, "rigid_body": {"mass": 1}, "audio_source": {"clip": "audio/tone.wav"}, "script": {"asset": "scripts/coverage.lua"}}}
+    {
+      "id": 1,
+      "name": "Feature Coverage Entity",
+      "components": {
+        "transform": {"position": [0, 1, 0], "rotationDegrees": [0, 45, 0], "scale": [1, 1, 1]},
+        "renderable": {"mesh": "meshes/test_cube.gltf", "material": "materials/test_pbr.json"},
+        "rigidBody": {"mass": 10, "gravityScale": 1, "atmosphericDensity": 1, "viscosity": 1},
+        "audioEmitter": {"clip": "audio/test.ogg", "gain": 0.8, "loop": true},
+        "utilityAgent": {"energy": 0.3, "temperature": 0.6, "seekEnergyWeight": 1, "seekShelterWeight": 0.5},
+        "script": {"script": "scripts/feature_coverage.lua"}
+      }
+    }
   ]
 }

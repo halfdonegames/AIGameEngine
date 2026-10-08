@@ -1,0 +1,17 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake --preset default
+      - name: Build
+        run: cmake --build --preset default --config Debug
+      - name: Test
+        run: ctest --test-dir build/default --output-on-failure
