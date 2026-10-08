@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "entities": [
+    {"components": {"transform": {"position": [0, 2, 0], "rotation": [0, 0, 0], "scale": [1, 1, 1]}, "velocity": {"meters_per_second": [1, 0, 0]}, "mesh_renderer": {"mesh": "meshes/cube.gltf", "material": "materials/pbr_default"}, "rigid_body": {"mass": 1}, "audio_source": {"clip": "audio/tone.wav"}, "script": {"asset": "scripts/coverage.lua"}}}
+  ]
+}

@@ -1,0 +1,6 @@
+/build/
+/out/
+/.cache/
+*.user
+*.suo
+*.vcxproj.user

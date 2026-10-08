@@ -1,0 +1,4 @@
+#include "test_framework.hpp"
+#include "gaia/scripting/control_api.hpp"
+TEST(ControlApiQueriesAndSimulates) { gaia::World world; auto e = world.create_entity(); CHECK(world.add_transform(e, {}).ok()); CHECK(world.add_velocity(e, {{4.0F, 0.0F, 0.0F}}).ok()); gaia::ControlApi api(world); auto query = api.execute("{\"command\":\"world.query\"}"); CHECK(query.ok()); CHECK(query.value.find("entity_count") != std::string::npos); auto result = api.execute("{\"command\":\"world.simulate\",\"seconds\":0.25}"); CHECK(result.ok()); CHECK(world.transform(e)->position[0] == 1); }
+TEST(ControlApiValidatesCommands) { gaia::World world; gaia::ControlApi api(world); CHECK(!api.execute("{\"command\":\"unknown\"}").ok()); CHECK(!api.execute("{\"command\":\"world.simulate\",\"seconds\":-1}").ok()); CHECK(api.execute("{\"command\":\"entity.create\"}").ok()); }
