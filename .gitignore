@@ -6,3 +6,5 @@ out/
 *.suo
 *.vcxproj*
 compile_commands.json
+*.zip
+_CPack_Packages/

@@ -6,6 +6,10 @@ option(GAIA_BUILD_EDITOR "Build the authoring editor executable" ON)
 option(GAIA_BUILD_RUNTIME "Build the distributable runtime executable" ON)
 option(GAIA_BUILD_TESTS "Build automated tests" ON)
 
+if(MSVC)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
+
 add_library(GaiaCore STATIC
     src/core/json.cpp
     src/ecs/world.cpp
@@ -32,6 +36,24 @@ if(GAIA_BUILD_RUNTIME)
     target_compile_definitions(GaiaRuntime PRIVATE GAIA_RUNTIME_BUILD=1)
 endif()
 
+install(TARGETS GaiaCore
+    ARCHIVE DESTINATION lib)
+
+if(GAIA_BUILD_EDITOR)
+    install(TARGETS GaiaEditor
+        RUNTIME DESTINATION bin)
+endif()
+
+if(GAIA_BUILD_RUNTIME)
+    install(TARGETS GaiaRuntime
+        RUNTIME DESTINATION bin)
+endif()
+
+install(DIRECTORY assets/scenes/
+    DESTINATION share/G.A.I.A-I/scenes)
+install(FILES README.md
+    DESTINATION share/G.A.I.A-I)
+
 if(GAIA_BUILD_TESTS)
     enable_testing()
     add_executable(GaiaTests
@@ -43,3 +65,10 @@ if(GAIA_BUILD_TESTS)
     add_test(NAME GaiaTests COMMAND GaiaTests ${CMAKE_CURRENT_SOURCE_DIR}/assets/scenes/feature_coverage.json)
     set_tests_properties(GaiaTests PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 endif()
+
+set(CPACK_PACKAGE_NAME "G.A.I.A-I")
+set(CPACK_PACKAGE_VENDOR "G.A.I.A-I")
+set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
+set(CPACK_PACKAGE_FILE_NAME "G.A.I.A-I-${PROJECT_VERSION}-windows-x64")
+set(CPACK_GENERATOR "ZIP")
+include(CPack)
